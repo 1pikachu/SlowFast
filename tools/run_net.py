@@ -25,10 +25,7 @@ def main():
         # OOB
         cfg.TRAIN.ENABLE = False
         cfg.LOG_MODEL_INFO = False
-        if args.device == "cuda":
-            cfg.NUM_GPUS = 1
-        else:
-            cfg.NUM_GPUS = 0
+        cfg.NUM_GPUS = 0
         cfg.DATA.DECODING_BACKEND = 'pyav'
         cfg.DATA.PATH_PREFIX = args.dataset_dir
         cfg.DATA.PATH_LABEL_SEPARATOR = ','
