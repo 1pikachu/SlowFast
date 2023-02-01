@@ -76,7 +76,7 @@ def perform_test(test_loader, model, test_meter, cfg, writer=None):
     model = model.to(cfg.device)
 
     if cfg.device == "xpu":
-        model = torch.xpu.optimize(model=model, dtype=datatype)
+        model = torch.xpu.optimize(model=model, dtype=cfg.datatype[0])
         print("---- xpu optimize")
     if cfg.jit:
         try:
