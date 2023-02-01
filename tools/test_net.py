@@ -43,14 +43,12 @@ def perform_test(test_loader, model, test_meter, cfg, writer=None):
         writer (TensorboardWriter object, optional): TensorboardWriter object
             to writer Tensorboard log.
     """
-    def convert_device(inputs, labels=None, video_idx=None, meta=None, device="cuda"):
+    def convert_device(inputs, video_idx=None, meta=None, device="cuda"):
         if isinstance(inputs, (list,)):
             for i in range(len(inputs)):
                 inputs[i] = inputs[i].to(cfg.device)
         else:
             inputs = inputs.to(cfg.device)
-        if labels:
-            labels = labels.to(cfg.device)
         if video_idx:
             video_idx = video_idx.to(cfg.device)
         if meta:
@@ -60,7 +58,7 @@ def perform_test(test_loader, model, test_meter, cfg, writer=None):
                         val[i] = val[i].to(cfg.device)
                 else:
                     meta[key] = val.to(cfg.device)
-        return inputs, labels, video_idx, meta
+        return inputs, video_idx, meta
         
 
     if cfg.channels_last and cfg.device != "xpu":
@@ -82,11 +80,10 @@ def perform_test(test_loader, model, test_meter, cfg, writer=None):
         print("---- xpu optimize")
     if cfg.jit:
         try:
-            with torch.no_grad():
-                inputs = iter(test_loader).__next__()[0]
-                inputs = convert_device(inputs, device=cfg.device)[0]
-                inputs = [inputs]
-                model = torch.jit.trace(model, inputs)
+            inputs = iter(test_loader).__next__()[0]
+            inputs = convert_device(inputs, device=cfg.device)[0]
+            inputs = [inputs]
+            model = torch.jit.trace(model, inputs, check_trace=False)
             print("---- with JIT trace")
         except (RuntimeError, TypeError) as e:
             print("---- JIT trace disable.")
@@ -95,7 +92,7 @@ def perform_test(test_loader, model, test_meter, cfg, writer=None):
     total_time = 0.0
     total_sample = 0
     profile_iter = min(cfg.num_iter+cfg.num_warmup, len(test_loader)) // 2
-    for cur_iter, (inputs, labels, video_idx, time, meta) in enumerate(
+    for cur_iter, (inputs, labels, video_idx, time_, meta) in enumerate(
         test_loader
     ):
         if cur_iter > cfg.num_iter and cfg.num_iter > 1: break
@@ -134,13 +131,13 @@ def perform_test(test_loader, model, test_meter, cfg, writer=None):
             if not cfg.CONTRASTIVE.KNN_ON:
                 test_meter.finalize_metrics()
                 return test_meter
-            # preds = model(inputs, video_idx, time)
+            # preds = model(inputs, video_idx, time_)
             train_labels = (
                 model.module.train_labels
                 if hasattr(model, "module")
                 else model.train_labels
             )
-            yd, yi = model(inputs, video_idx, time)
+            yd, yi = model(inputs, video_idx, time_)
             batchSize = yi.shape[0]
             K = yi.shape[1]
             C = cfg.CONTRASTIVE.NUM_CLASSES_DOWNSTREAM  # eg 400 for Kinetics400
@@ -159,7 +156,7 @@ def perform_test(test_loader, model, test_meter, cfg, writer=None):
             with torch.autograd.profiler_legacy.profile(enabled=True, use_xpu=True, record_shapes=False) as prof:
                 tic = time.time()
                 # Transfer the data to the current GPU device.
-                inputs, labels, video_idx, meta = convert_device(inputs, labels, video_idx, meta, cfg.device)
+                inputs, video_idx, meta = convert_device(inputs, video_idx, meta, cfg.device)
                 preds = model(inputs)
                 torch.xpu.synchronize()
                 toc = time.time()
@@ -183,7 +180,6 @@ def perform_test(test_loader, model, test_meter, cfg, writer=None):
             if cur_iter >= cfg.num_warmup:
                 total_time += elapsed
                 total_sample += cfg.TEST.BATCH_SIZE
-                batch_time_list.append(elapsed * 1000)
         elif cfg.profile and cfg.device != "xpu":
             with torch.profiler.profile(
                 activities=[
@@ -194,7 +190,7 @@ def perform_test(test_loader, model, test_meter, cfg, writer=None):
             ) as p:
                 tic = time.time()
                 # Transfer the data to the current GPU device.
-                inputs, labels, video_idx, meta = convert_device(inputs, labels, video_idx, meta, cfg.device)
+                inputs, video_idx, meta = convert_device(inputs, video_idx, meta, cfg.device)
                 if cfg.device == "cuda":
                     with torch.jit.fuser(fuser_mode):
                         preds = model(inputs)
@@ -207,7 +203,6 @@ def perform_test(test_loader, model, test_meter, cfg, writer=None):
             if cur_iter >= cfg.num_warmup:
                 total_time += elapsed
                 total_sample += cfg.TEST.BATCH_SIZE
-                batch_time_list.append(elapsed * 1000)
             if cur_iter == profile_iter:
                 output = p.key_averages().table(sort_by="self_cpu_time_total")
                 print(output)
@@ -224,7 +219,7 @@ def perform_test(test_loader, model, test_meter, cfg, writer=None):
         else:
             tic = time.time()
             # Transfer the data to the current GPU device.
-            inputs, labels, video_idx, meta = convert_device(inputs, labels, video_idx, meta, cfg.device)
+            inputs, video_idx, meta = convert_device(inputs, video_idx, meta, cfg.device)
             # Perform the forward pass.
             if cfg.device == "cuda":
                 with torch.jit.fuser(fuser_mode):
@@ -241,26 +236,31 @@ def perform_test(test_loader, model, test_meter, cfg, writer=None):
             if cur_iter >= cfg.num_warmup:
                 total_time += elapsed
                 total_sample += cfg.TEST.BATCH_SIZE
-                batch_time_list.append(elapsed * 1000)
 
         # Gather all the predictions across all the devices to perform ensemble.
-        if cfg.NUM_GPUS > 1:
-            preds, labels, video_idx = du.all_gather(
-                [preds, labels, video_idx]
-            )
-        if cfg.NUM_GPUS:
-            preds = preds.cpu()
-            labels = labels.cpu()
-            video_idx = video_idx.cpu()
+        #if cfg.NUM_GPUS > 1:
+        #    preds, labels, video_idx = du.all_gather(
+        #        [preds, labels, video_idx]
+        #    )
+        #if cfg.NUM_GPUS:
+        #    preds = preds.cpu()
+        #    labels = labels.cpu()
+        #    video_idx = video_idx.cpu()
 
         test_meter.iter_toc()
         # Update and log stats.
         #test_meter.update_stats(
         #    preds.detach(), labels.detach(), video_idx.detach()
         #)
-        test_meter.log_iter_stats(cur_iter)
+        #test_meter.log_iter_stats(cur_iter)
 
         test_meter.iter_tic()
+    print("\n", "-"*20, "Summary", "-"*20)
+    latency = total_time / total_sample * 1000
+    throughput = total_sample / total_time
+    print("inference Latency: {} ms".format(latency))
+    print("inference Throughput: {} samples/s".format(throughput))
+    exit(0)
 
     # Log epoch stats and print the final testing results.
     if not cfg.DETECTION.ENABLE:
