@@ -478,6 +478,21 @@ _C.MVIT.SEP_POS_EMBED = False
 # Dropout rate for the MViT backbone.
 _C.MVIT.DROPOUT_RATE = 0.0
 
+# If True, use absolute positional embedding.
+_C.MVIT.USE_ABS_POS = True
+
+# If True, use relative positional embedding for spatial dimentions
+_C.MVIT.REL_POS_SPATIAL = False
+
+# If True, use relative positional embedding for temporal dimentions
+_C.MVIT.REL_POS_TEMPORAL = False
+
+# Dim mul in qkv linear layers of attention block instead of MLP
+_C.MVIT.DIM_MUL_IN_ATT = False
+
+# If True, using Residual Pooling connection
+_C.MVIT.RESIDUAL_POOLING = False
+
 
 # -----------------------------------------------------------------------------
 # SlowFast options
