@@ -7,6 +7,7 @@ import numpy as np
 import os
 import pickle
 import torch
+import time
 
 import slowfast.utils.checkpoint as cu
 import slowfast.utils.distributed as du
@@ -42,30 +43,68 @@ def perform_test(test_loader, model, test_meter, cfg, writer=None):
         writer (TensorboardWriter object, optional): TensorboardWriter object
             to writer Tensorboard log.
     """
+    def convert_device(inputs, labels=None, video_idx=None, meta=None, device="cuda"):
+        if isinstance(inputs, (list,)):
+            for i in range(len(inputs)):
+                inputs[i] = inputs[i].to(cfg.device)
+        else:
+            inputs = inputs.to(cfg.device)
+        if labels:
+            labels = labels.to(cfg.device)
+        if video_idx:
+            video_idx = video_idx.to(cfg.device)
+        if meta:
+            for key, val in meta.items():
+                if isinstance(val, (list,)):
+                    for i in range(len(val)):
+                        val[i] = val[i].to(cfg.device)
+                else:
+                    meta[key] = val.to(cfg.device)
+        return inputs, labels, video_idx, meta
+        
+
+    if cfg.channels_last and cfg.device != "xpu":
+        model = model.to(memory_format=torch.channels_last_3d)
+        print("---- Use 3D NHWC model")
+    if cfg.nv_fuser:
+        fuser_mode = "fuser2"
+    else:
+        fuser_mode = "none"
+
     # Enable eval mode.
     model.eval()
     test_meter.iter_tic()
 
+    model = model.to(cfg.device)
+
+    if cfg.device == "xpu":
+        model = torch.xpu.optimize(model=model, dtype=datatype)
+        print("---- xpu optimize")
+    if cfg.jit:
+        try:
+            with torch.no_grad():
+                inputs = iter(test_loader).__next__()[0]
+                inputs = convert_device(inputs, device=cfg.device)[0]
+                inputs = [inputs]
+                model = torch.jit.trace(model, inputs)
+            print("---- with JIT trace")
+        except (RuntimeError, TypeError) as e:
+            print("---- JIT trace disable.")
+            print("failed to use PyTorch jit mode due to: ", e)
+
+    total_time = 0.0
+    total_sample = 0
+    profile_iter = min(cfg.num_iter+cfg.num_warmup, len(test_loader)) // 2
     for cur_iter, (inputs, labels, video_idx, time, meta) in enumerate(
         test_loader
     ):
+        if cur_iter > cfg.num_iter and cfg.num_iter > 1: break
+        if cfg.channels_last and cfg.device != "xpu":
+            try:
+                inputs = [i.to(memory_format=torch.channels_last_3d) for i in inputs]
+            except:
+                pass
 
-        if cfg.NUM_GPUS:
-            # Transfer the data to the current GPU device.
-            if isinstance(inputs, (list,)):
-                for i in range(len(inputs)):
-                    inputs[i] = inputs[i].cuda(non_blocking=True)
-            else:
-                inputs = inputs.cuda(non_blocking=True)
-            # Transfer the data to the current GPU device.
-            labels = labels.cuda()
-            video_idx = video_idx.cuda()
-            for key, val in meta.items():
-                if isinstance(val, (list,)):
-                    for i in range(len(val)):
-                        val[i] = val[i].cuda(non_blocking=True)
-                else:
-                    meta[key] = val.cuda(non_blocking=True)
         test_meter.data_toc()
 
         if cfg.DETECTION.ENABLE:
@@ -115,9 +154,94 @@ def perform_test(test_loader, model, test_meter, cfg, writer=None):
                 yd_transform.view(batchSize, -1, 1),
             )
             preds = torch.sum(probs, 1)
-        else:
+        elif cfg.profile and cfg.device == "xpu":
             # Perform the forward pass.
-            preds = model(inputs)
+            with torch.autograd.profiler_legacy.profile(enabled=True, use_xpu=True, record_shapes=False) as prof:
+                tic = time.time()
+                # Transfer the data to the current GPU device.
+                inputs, labels, video_idx, meta = convert_device(inputs, labels, video_idx, meta, cfg.device)
+                preds = model(inputs)
+                torch.xpu.synchronize()
+                toc = time.time()
+            if cfg.profile and cur_iter == profile_iter:
+                import pathlib
+                timeline_dir = str(pathlib.Path.cwd()) + '/timeline/'
+                if not os.path.exists(timeline_dir):
+                    try:
+                        os.makedirs(timeline_dir)
+                    except:
+                        pass
+                torch.save(prof.key_averages().table(sort_by="self_xpu_time_total"),
+                    timeline_dir+'profile.pt')
+                torch.save(prof.key_averages(group_by_input_shape=True).table(),
+                    timeline_dir+'profile_detail.pt')
+                torch.save(prof.table(sort_by="id", row_limit=100000),
+                    timeline_dir+'profile_detail_withId.pt')
+                prof.export_chrome_trace(timeline_dir+"trace.json")
+            elapsed = toc - tic
+            print("Iteration: {}, inference time: {} sec.".format(cur_iter, elapsed), flush=True)
+            if cur_iter >= cfg.num_warmup:
+                total_time += elapsed
+                total_sample += cfg.TEST.BATCH_SIZE
+                batch_time_list.append(elapsed * 1000)
+        elif cfg.profile and cfg.device != "xpu":
+            with torch.profiler.profile(
+                activities=[
+                    torch.profiler.ProfilerActivity.CPU,
+                    torch.profiler.ProfilerActivity.CUDA
+                ],
+                record_shapes=True,
+            ) as p:
+                tic = time.time()
+                # Transfer the data to the current GPU device.
+                inputs, labels, video_idx, meta = convert_device(inputs, labels, video_idx, meta, cfg.device)
+                if cfg.device == "cuda":
+                    with torch.jit.fuser(fuser_mode):
+                        preds = model(inputs)
+                    torch.cuda.synchronize()
+                else:
+                    preds = model(inputs)
+                toc = time.time()
+            elapsed = toc - tic
+            print("Iteration: {}, inference time: {} sec.".format(cur_iter, elapsed), flush=True)
+            if cur_iter >= cfg.num_warmup:
+                total_time += elapsed
+                total_sample += cfg.TEST.BATCH_SIZE
+                batch_time_list.append(elapsed * 1000)
+            if cur_iter == profile_iter:
+                output = p.key_averages().table(sort_by="self_cpu_time_total")
+                print(output)
+                import pathlib
+                timeline_dir = str(pathlib.Path.cwd()) + '/timeline/'
+                if not os.path.exists(timeline_dir):
+                    try:
+                        os.makedirs(timeline_dir)
+                    except:
+                        pass
+                timeline_file = timeline_dir + 'timeline-' + str(torch.backends.quantized.engine) + '-' + \
+                            str(cur_iter) + '-' + str(os.getpid()) + '.json'
+                p.export_chrome_trace(timeline_file)
+        else:
+            tic = time.time()
+            # Transfer the data to the current GPU device.
+            inputs, labels, video_idx, meta = convert_device(inputs, labels, video_idx, meta, cfg.device)
+            # Perform the forward pass.
+            if cfg.device == "cuda":
+                with torch.jit.fuser(fuser_mode):
+                    preds = model(inputs)
+                torch.cuda.synchronize()
+            elif cfg.device == "xpu":
+                preds = model(inputs)
+                torch.xpu.synchronize()
+            else:
+                preds = model(inputs)
+            toc = time.time()
+            elapsed = toc - tic
+            print("Iteration: {}, inference time: {} sec.".format(cur_iter, elapsed), flush=True)
+            if cur_iter >= cfg.num_warmup:
+                total_time += elapsed
+                total_sample += cfg.TEST.BATCH_SIZE
+                batch_time_list.append(elapsed * 1000)
 
         # Gather all the predictions across all the devices to perform ensemble.
         if cfg.NUM_GPUS > 1:
@@ -131,9 +255,9 @@ def perform_test(test_loader, model, test_meter, cfg, writer=None):
 
         test_meter.iter_toc()
         # Update and log stats.
-        test_meter.update_stats(
-            preds.detach(), labels.detach(), video_idx.detach()
-        )
+        #test_meter.update_stats(
+        #    preds.detach(), labels.detach(), video_idx.detach()
+        #)
         test_meter.log_iter_stats(cur_iter)
 
         test_meter.iter_tic()
@@ -171,7 +295,7 @@ def test(cfg):
             slowfast/config/defaults.py
     """
     # Set up environment.
-    du.init_distributed_training(cfg)
+    #du.init_distributed_training(cfg)
     # Set random seed from configs.
     np.random.seed(cfg.RNG_SEED)
     torch.manual_seed(cfg.RNG_SEED)

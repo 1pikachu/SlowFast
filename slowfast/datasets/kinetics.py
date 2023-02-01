@@ -141,7 +141,7 @@ class Kinetics(torch.utils.data.Dataset):
                     self._path_to_videos.append(
                         os.path.join(self.cfg.DATA.PATH_PREFIX, path)
                     )
-                    self._labels.append(int(label))
+                    self._labels.append(label)
                     self._spatial_temporal_idx.append(idx)
                     self._video_meta[clip_idx * self._num_clips + idx] = {}
         assert (

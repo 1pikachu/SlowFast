@@ -5,6 +5,7 @@
 
 import argparse
 import sys
+import torch
 
 import slowfast.utils.checkpoint as cu
 from slowfast.config.defaults import get_cfg
@@ -59,6 +60,33 @@ def parse_args():
         default=None,
         nargs=argparse.REMAINDER,
     )
+    parser.add_argument(
+        "--precision",
+        type=str,
+        default="float16"
+    )
+    parser.add_argument(
+        "--channels_last",
+        type=int,
+        default=1
+    )
+    parser.add_argument(
+        "--num_iter",
+        type=int,
+        default=1
+    )
+    parser.add_argument(
+        "--num_warmup",
+        type=int,
+        default=0
+    )
+    parser.add_argument('--profile', action='store_true', help='profile')
+    parser.add_argument('--jit', action='store_true')
+    parser.add_argument('--nv_fuser', action='store_true', default=False, help='enable nvFuser')
+    parser.add_argument('--device', default='cpu', type=str, help='cpu, cuda or xpu')
+    parser.add_argument('--dataset_dir', type=str, default='/home2/pytorch-broad-models/pytorchvideo/tiny-Kinetics-400', help='dataset_dir')
+    parser.add_argument('--batch_size', type=int, default=1, help='batch_size')
+
     if len(sys.argv) == 1:
         parser.print_help()
     return parser.parse_args()
@@ -88,6 +116,18 @@ def load_config(args, path_to_config=None):
         cfg.RNG_SEED = args.rng_seed
     if hasattr(args, "output_dir"):
         cfg.OUTPUT_DIR = args.output_dir
+
+    # OOB
+    cfg.precision = args.precision
+    cfg.channels_last = args.channels_last
+    cfg.num_iter = args.num_iter
+    cfg.num_warmup = args.num_warmup
+    cfg.profile = args.profile
+    cfg.jit = args.jit
+    cfg.nv_fuser = args.nv_fuser
+    cfg.device = args.device
+    cfg.dataset_dir = args.dataset_dir
+    cfg.batch_size = args.batch_size
 
     # Create the checkpoint dir.
     cu.make_checkpoint_dir(cfg.OUTPUT_DIR)
