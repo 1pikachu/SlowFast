@@ -59,11 +59,14 @@ def perform_test(test_loader, model, test_meter, cfg, writer=None):
                 else:
                     meta[key] = val.to(cfg.device)
         return inputs, video_idx, meta
-        
+
 
     if cfg.channels_last and cfg.device != "xpu":
         model = model.to(memory_format=torch.channels_last_3d)
         print("---- Use 3D NHWC model")
+    if cfg.compile:
+        print("----enable compiler")
+        pipe = torch.compile(pipe, backend=cfg.backend, options={"freezing": True})
     if cfg.nv_fuser:
         fuser_mode = "fuser2"
     else:

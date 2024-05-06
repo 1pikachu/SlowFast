@@ -86,6 +86,8 @@ def parse_args():
     parser.add_argument('--device', default='cpu', type=str, help='cpu, cuda or xpu')
     parser.add_argument('--dataset_dir', type=str, default='/home2/pytorch-broad-models/pytorchvideo/tiny-Kinetics-400', help='dataset_dir')
     parser.add_argument('--batch_size', type=int, default=1, help='batch_size')
+    parser.add_argument('--compile', action='store_true', default=False, help='compile model')
+    parser.add_argument('--backend', default="inductor", type=str, help='backend')
 
     if len(sys.argv) == 1:
         parser.print_help()
