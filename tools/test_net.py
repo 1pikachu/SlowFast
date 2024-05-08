@@ -90,7 +90,7 @@ def perform_test(test_loader, model, test_meter, cfg, writer=None):
             print("failed to use PyTorch jit mode due to: ", e)
     if cfg.compile:
         print("----enable compiler")
-        pipe = torch.compile(pipe, backend=cfg.backend, options={"freezing": True})
+        model = torch.compile(model, backend=cfg.backend, options={"freezing": True})
 
     total_time = 0.0
     total_sample = 0
