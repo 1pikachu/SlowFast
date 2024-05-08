@@ -20,6 +20,7 @@ function main {
     # slowfast
     cd ..
     pip install -e .
+    pip install opencv-python==4.8.0.74
 
     # if multiple use 'xxx,xxx,xxx'
     model_name_list=($(echo "${model_name}" |sed 's/,/ /g'))
