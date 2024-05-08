@@ -64,9 +64,6 @@ def perform_test(test_loader, model, test_meter, cfg, writer=None):
     if cfg.channels_last and cfg.device != "xpu":
         model = model.to(memory_format=torch.channels_last_3d)
         print("---- Use 3D NHWC model")
-    if cfg.compile:
-        print("----enable compiler")
-        pipe = torch.compile(pipe, backend=cfg.backend, options={"freezing": True})
     if cfg.nv_fuser:
         fuser_mode = "fuser2"
     else:
@@ -91,6 +88,9 @@ def perform_test(test_loader, model, test_meter, cfg, writer=None):
         except (RuntimeError, TypeError) as e:
             print("---- JIT trace disable.")
             print("failed to use PyTorch jit mode due to: ", e)
+    if cfg.compile:
+        print("----enable compiler")
+        pipe = torch.compile(pipe, backend=cfg.backend, options={"freezing": True})
 
     total_time = 0.0
     total_sample = 0

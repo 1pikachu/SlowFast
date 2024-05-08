@@ -130,6 +130,8 @@ def load_config(args, path_to_config=None):
     cfg.device = args.device
     cfg.dataset_dir = args.dataset_dir
     cfg.batch_size = args.batch_size
+    cfg.compile = args.compile
+    cfg.backend = args.backend
 
     # Create the checkpoint dir.
     cu.make_checkpoint_dir(cfg.OUTPUT_DIR)
