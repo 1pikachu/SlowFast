@@ -73,8 +73,8 @@ function generate_core {
         fi
         if [[ "${addtion_options}" =~ "--compile" ]];then
             echo "run with compile"
-        else
-            addtion_options+=" --jit "
+        elif [[ "${addtion_options}" =~ "--jit" ]];then
+            echo "run with jit"
         fi
         printf " ${OOB_EXEC_HEADER} \
 	        python tools/run_net.py --cfg ${CONFIG_FILE} \
