@@ -156,7 +156,9 @@ def perform_test(test_loader, model, test_meter, cfg, writer=None):
             preds = torch.sum(probs, 1)
         elif cfg.profile and cfg.device == "xpu":
             # Perform the forward pass.
-            with torch.autograd.profiler_legacy.profile(enabled=True, use_xpu=True, record_shapes=False) as prof:
+            profile_activity = [torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.XPU]
+            schedule = torch.profiler.schedule(wait=6, warmup=3, active=1)
+            with (torch.profiler.profile(activities=profile_activity, schedule=schedule)) as prof:
                 tic = time.time()
                 # Transfer the data to the current GPU device.
                 inputs, video_idx, meta = convert_device(inputs, video_idx, meta, cfg.device)
@@ -171,7 +173,7 @@ def perform_test(test_loader, model, test_meter, cfg, writer=None):
                         os.makedirs(timeline_dir)
                     except:
                         pass
-                torch.save(prof.key_averages().table(sort_by="self_xpu_time_total"),
+                torch.save(prof.key_averages().table(sort_by="self_xpu_time_total".format(cfg.device), row_limit=100000),
                     timeline_dir+'profile.pt')
                 torch.save(prof.key_averages(group_by_input_shape=True).table(),
                     timeline_dir+'profile_detail.pt')
