@@ -168,8 +168,7 @@ def perform_test(test_loader, model, test_meter, cfg, writer=None):
             # Transfer the data to the current GPU device.
             inputs, video_idx, meta = convert_device(inputs, video_idx, meta, cfg.device)
             if cfg.device == "cuda":
-                with torch.jit.fuser(fuser_mode):
-                    preds = model(inputs)
+                preds = model(inputs)
                 torch.cuda.synchronize()
             elif cfg.device == "xpu":
                 preds = model(inputs)
