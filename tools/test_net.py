@@ -163,7 +163,7 @@ def perform_test(test_loader, model, test_meter, cfg, writer=None):
             )
             preds = torch.sum(probs, 1)
         #elif cfg.profile and cfg.device == "xpu":
-        with context_func(cfg.profile, cfg.device, fuser_mode='none') as prof:
+        with context_func(cfg.profile, cfg.device, fuser_mode) as prof:
             tic = time.time()
             # Transfer the data to the current GPU device.
             inputs, video_idx, meta = convert_device(inputs, video_idx, meta, cfg.device)
@@ -177,9 +177,9 @@ def perform_test(test_loader, model, test_meter, cfg, writer=None):
             else:
                 preds = model(inputs)
             toc = time.time()
-        elapsed = toc - tic
-        if cfg.profile:
-            prof.step()
+            elapsed = toc - tic
+            if cfg.profile:
+                prof.step()
         print("Iteration: {}, inference time: {} sec.".format(cur_iter, elapsed), flush=True)
         if cur_iter >= cfg.num_warmup:
             total_time += elapsed
