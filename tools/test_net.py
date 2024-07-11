@@ -163,7 +163,7 @@ def perform_test(test_loader, model, test_meter, cfg, writer=None):
             )
             preds = torch.sum(probs, 1)
         #elif cfg.profile and cfg.device == "xpu":
-        with context_func(cfg.profile if cur_iter == profile_iter else None, cfg.device, fuser_mode, schedule_disable="yes") as prof:
+        with context_func(True if cfg.profile and cur_iter == profile_iter else False, cfg.device, fuser_mode, schedule_disable="yes") as prof:
             tic = time.time()
             # Transfer the data to the current GPU device.
             inputs, video_idx, meta = convert_device(inputs, video_idx, meta, cfg.device)
