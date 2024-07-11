@@ -117,7 +117,7 @@ function generate_core_launcher {
 }
 
 # download common files
-rm -rf oob-common && git clone https://github.com/intel-sandbox/oob-common.git -b gpu_oob
+rm -rf oob-common && git clone https://github.com/intel-sandbox/oob-common.git -b ruijie/update_profile
 
 # Start
 main "$@"
