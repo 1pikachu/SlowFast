@@ -177,9 +177,9 @@ def perform_test(test_loader, model, test_meter, cfg, writer=None):
             else:
                 preds = model(inputs)
             toc = time.time()
-            elapsed = toc - tic
-            if cfg.profile:
-                prof.step()
+        elapsed = toc - tic
+        if cfg.profile:
+            prof.step()
         print("Iteration: {}, inference time: {} sec.".format(cur_iter, elapsed), flush=True)
         if cur_iter >= cfg.num_warmup:
             total_time += elapsed
