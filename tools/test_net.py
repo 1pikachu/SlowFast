@@ -83,9 +83,13 @@ def perform_test(test_loader, model, test_meter, cfg, writer=None):
 
     model = model.to(cfg.device)
 
-    if cfg.device == "xpu":
+    if cfg.device == "xpu" and cfg.ipex:
         model = torch.xpu.optimize(model=model, dtype=cfg.datatype[0])
         print("---- xpu optimize")
+    if cfg.xpu_fallback:
+        os.environ["PYTORCH_ENABLE_XPU_FALLBACK"] = "1"
+        print("PYTORCH_ENABLE_XPU_FALLBACK", os.environ["PYTORCH_ENABLE_XPU_FALLBACK"])
+        print("---- Enable fallback")
     if cfg.jit:
         try:
             inputs = iter(test_loader).__next__()[0]
