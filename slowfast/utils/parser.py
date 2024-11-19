@@ -89,7 +89,6 @@ def parse_args():
     parser.add_argument('--compile', action='store_true', default=False, help='compile model')
     parser.add_argument('--backend', default="inductor", type=str, help='backend')
     parser.add_argument('--ipex', default=False, action='store_true', help="ipex is not enabled now")
-    parser.add_argument("--xpu_fallback", default=False, action="store_true", help="Whether to set xpu fallback")
 
     if len(sys.argv) == 1:
         parser.print_help()
