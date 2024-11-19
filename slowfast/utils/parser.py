@@ -134,6 +134,7 @@ def load_config(args, path_to_config=None):
     cfg.batch_size = args.batch_size
     cfg.compile = args.compile
     cfg.backend = args.backend
+    cfg.ipex = args.ipex
 
     # Create the checkpoint dir.
     cu.make_checkpoint_dir(cfg.OUTPUT_DIR)

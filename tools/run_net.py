@@ -31,7 +31,7 @@ def main():
         cfg.DATA.PATH_LABEL_SEPARATOR = ','
         cfg.TEST.BATCH_SIZE = args.batch_size
 
-        if args.device == "xpu":
+        if args.device == "xpu" and args.ipex:
             import intel_extension_for_pytorch
         elif args.device == "cuda":
             torch.backends.cuda.matmul.allow_tf32 = False
