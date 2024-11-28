@@ -44,13 +44,13 @@ def main():
         # Perform multi-clip testing.
         if cfg.TEST.ENABLE:
             if args.device == "cuda":
-                with torch.autocast(enabled=True, dtype=cfg.datatype[0]):
+                with torch.autocast(enabled=True, dtype=cfg.datatype[0], device_type=args.device):
                     launch_job(cfg=cfg, init_method=args.init_method, func=test)
             elif args.device == "xpu":
-                with torch.autocast(enabled=True, dtype=cfg.datatype[0]):
+                with torch.autocast(enabled=True, dtype=cfg.datatype[0], device_type=args.device):
                     launch_job(cfg=cfg, init_method=args.init_method, func=test)
             else:
-                with torch.autocast(enabled=True, dtype=cfg.datatype[0]):
+                with torch.autocast(enabled=True, dtype=cfg.datatype[0], device_type=args.device):
                     launch_job(cfg=cfg, init_method=args.init_method, func=test)
 
 
