@@ -69,7 +69,7 @@ def perform_test(test_loader, model, test_meter, cfg, writer=None):
         return inputs, video_idx, meta
 
 
-    if cfg.channels_last and cfg.device != "xpu":
+    if cfg.channels_last:
         model = model.to(memory_format=torch.channels_last_3d)
         print("---- Use 3D NHWC model")
     if cfg.nv_fuser:
@@ -107,7 +107,7 @@ def perform_test(test_loader, model, test_meter, cfg, writer=None):
         test_loader
     ):
         if cur_iter > cfg.num_iter and cfg.num_iter > 1: break
-        if cfg.channels_last and cfg.device != "xpu":
+        if cfg.channels_last:
             try:
                 inputs = [i.to(memory_format=torch.channels_last_3d) for i in inputs]
             except:
